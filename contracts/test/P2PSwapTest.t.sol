@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.19;
 pragma abicoder v2;
 
 import {Test, console} from "forge-std/Test.sol";
@@ -137,9 +137,10 @@ contract P2PSwapTest is Test {
     function testBuyAsset() public giveSellerSomeAssetToSell(SELLER_1) {
         bytes32 positionHash = createSwapPostion();
         uint256 amountUsedToBuy = 40;
-        uint256 amountBuyerShouldReceiveOnDestinationChain = buyerContract.getAmountToReceiveFromBuying(address(sellerAsset), address(buyerAsset), 5, amountUsedToBuy);
+        uint256 amountBuyerShouldReceiveOnDestinationChain =
+            buyerContract.getAmountToReceiveFromBuying(address(sellerAsset), address(buyerAsset), 5, amountUsedToBuy);
         uint256 balanceOfSellerBeforeBuyerBoughtOnDestinationChain = buyerAsset.balanceOf(SELLER_1_DESTINATION_ADDRESS);
-        uint256 balanceOfBuyerBeforeBuyingOnDestinationChain = sellerAsset.balanceOf(BUYER_1_DESTINATION_ADDRESS); 
+        uint256 balanceOfBuyerBeforeBuyingOnDestinationChain = sellerAsset.balanceOf(BUYER_1_DESTINATION_ADDRESS);
 
         buyerAsset.drip(BUYER_1);
         vm.startPrank(BUYER_1);
@@ -163,11 +164,20 @@ contract P2PSwapTest is Test {
         console.log("Balance of buyer after buying", balanceOfBuyerAfterBuying);
 
         assertEq(balanceOfBuyerAfterBuying + amountUsedToBuy, balanceOFBuyerBeforeBuyingOnHisOwnChain);
-        assertEq(balanceOfSellerAfterBuyerBoughtOnDestinationChain, balanceOfSellerBeforeBuyerBoughtOnDestinationChain + amountUsedToBuy);
-        assertEq(balanceOfBuyerBeforeBuyingOnDestinationChain + amountBuyerShouldReceiveOnDestinationChain, balanceOfBuyerAfterBuyingOnDestinationChain);
+        assertEq(
+            balanceOfSellerAfterBuyerBoughtOnDestinationChain,
+            balanceOfSellerBeforeBuyerBoughtOnDestinationChain + amountUsedToBuy
+        );
+        assertEq(
+            balanceOfBuyerBeforeBuyingOnDestinationChain + amountBuyerShouldReceiveOnDestinationChain,
+            balanceOfBuyerAfterBuyingOnDestinationChain
+        );
         vm.stopPrank();
         vm.prank(SELLER_1);
-        assertEq(sellerContract.getBalanceOfDepositedAsset(address(sellerAsset)), AMOUNT_OF_ASSET_TO_SELL - amountBuyerShouldReceiveOnDestinationChain);
+        assertEq(
+            sellerContract.getBalanceOfDepositedAsset(address(sellerAsset)),
+            AMOUNT_OF_ASSET_TO_SELL - amountBuyerShouldReceiveOnDestinationChain
+        );
     }
 
     function testGetAssetValueInUsd() public view {
