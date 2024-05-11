@@ -1,1 +1,0 @@
-# SwapNet smart contract
