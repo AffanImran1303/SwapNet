@@ -54,13 +54,6 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint64 destinationChainSelector
     );
 
-    struct Transaction {
-        uint256 senderAmount;
-        uint256 receiverAmount;
-        address senderAsset;
-        address receiverAsset;
-    }
-
     struct BuyOrder {
         address buyer;
         address buyerReceivingAddress;
@@ -71,14 +64,6 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint256 amountPaid;
         uint256 amountToReceive;
         uint64 buyerChainSelector;
-    }
-
-    struct Escrow {
-        address sender;
-        address receiver;
-        address senderAsset;
-        address receiverAsset;
-        uint256 senderAmount;
     }
 
     struct Position {
