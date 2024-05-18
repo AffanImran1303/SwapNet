@@ -17,19 +17,26 @@ import {SafeERC20} from
 import {FeedRegistryInterface} from "@chainlink/brownie/interfaces/FeedRegistryInterface.sol";
 import {Denominations} from "@chainlink/brownie/Denominations.sol";
 
+
+/// @title P2p_SwapNet
+/// @author Jeremiah Chinedu
+/// @notice Project for chainlink hackathon
+/// @dev This is a P2p cross chain swapper that utilizes chainlink cross-chain interoperabilty protocol
 contract P2pSwap is CCIPReceiver, OwnerIsCreator {
-    using SafeERC20 for IERC20;
+    // using SafeERC20 for IERC20;
 
     //////////////
     // Errors
     /////////////
-    error NotEnoughBalance(uint256 contractBalance, uint256 fees);
+    error P2pSwap__NotEnoughBalance(uint256 contractBalance, uint256 fees);
     error P2pSwap__ExceededNormalExchangeRate();
-    error P2pSwap__InSufficientBalanceToWithdraw(uint256 amount);
+    error P2pSwap__InsufficientBalanceToWithdraw(uint256 amount);
+    error P2pSwap__UnknownError();
 
     //////////////
     // Events
     /////////////
+
     // The chain selector of the destination chain.
     // The address of the receiver on the destination chain.
     // The text being sent.
@@ -37,7 +44,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     // The token amount that was transferred.
     // the token address used to pay CCIP fees.
     // The fees paid for sending the message.
-    event MessageSent( // The unique ID of the CCIP message.
+    event P2pSwap__MessageSent( // The unique ID of the CCIP message.
         bytes32 indexed messageId,
         uint64 indexed destinationChainSelector,
         address receiver,
@@ -45,10 +52,8 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         address feeToken,
         uint256 fees
     );
-
-    event AssetTransfer(bytes32 indexed messageId, address indexed to, address assetTransfered);
-
-    event PositionCreated(
+    event P2pSwap__AssetTransfer(bytes32 indexed messageId, address indexed to, address assetTransfered);
+    event P2pSwap__PositionCreated(
         bytes32 indexed messageId,
         address indexed assetToSell,
         address indexed assetToReceive,
@@ -69,7 +74,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
 
     struct Position {
         address sellerAddress;
-        address sellerReceivingAddress; // the wallet address of the seller
+        address sellerReceivingAddress; // the destination wallet address of the seller 
         uint256 sellingFrom; // chain ID of the blockchain the seller is selling from
         address assetSelling; // the address of the asset the seller is selling
         address assetReceiving; // the address of the asset the seller wants to receive in exchange of the asset he is selling, in otherwords this is the asset the buyer will pay with
@@ -77,14 +82,14 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint64 destinationChainSelector; // the chainlink destination chain selectorID, i.e the buyer's chainlink chain selector
     }
 
+
     /// @notice This holds all the assets available for buying/swapping on the blockchain that this
     /// contract will be deployed on
     /// @dev The position hash will be the keccak256 hash of the created position struct
-    mapping(bytes32 positionHash => Position) public openPositions;
-    uint256 private numberOfOpenPositions = 0;
+    mapping(bytes32 positionHash => Position) public s_openPositions;
+    uint256 public s_numberOfOpenPositions = 0;
 
-    mapping(bytes32 transactionId => Transaction transaction) private transactions;
-    mapping(address asset => mapping(address seller => uint256 amount)) public sellerDepositedAssets;
+    mapping(address asset => mapping(address seller => uint256 amount)) public s_sellerDepositedAssets;
     FeedRegistryInterface internal feedRegistry;
     uint256 messageGasLimit = 200_000;
 
@@ -100,6 +105,16 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     //////////////////////////////////////
     // public and external functions ////
     /////////////////////////////////////
+
+    /// @notice This function is called by the seller to create a position on the Destionation chain (aka buyer's chain)
+    /// @param _sellingAsset This is the asset the seller is willing to sell on the destination chain
+    /// @param _receiveingAsset This is the asset the seller will receive on successful swap. This asset will be received on the destination chain
+    /// @param _destinationP2pSwapContractAddress This is the address of the p2p swap contract on the destination chain. this contract will act like an escrow to swap the assets
+    /// @param _sellerAddress This is the destination address to receive the asset from buyer
+    /// @param _amountOfAssetToSell This is the amount of asset a seller is willing to sell
+    /// @param _sellingRatePercentage The exchange rate offered by the seller. It shouldn't be above 5%
+    /// @param _destinationChainSelector This is the chainlink destination chain selector
+    /// @return returns the postion hash, which is the keccak256 hash of the position data
     function createSwapPosition(
         address _sellingAsset,
         address _receiveingAsset,
@@ -113,7 +128,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             revert P2pSwap__ExceededNormalExchangeRate();
         }
 
-        sellerDepositedAssets[_sellingAsset][msg.sender] = _amountOfAssetToSell;
+        s_sellerDepositedAssets[_sellingAsset][msg.sender] = _amountOfAssetToSell;
         IERC20(_sellingAsset).transferFrom(msg.sender, address(this), _amountOfAssetToSell);
 
         Position memory swapPosition = Position({
@@ -133,6 +148,12 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         return positionHash;
     }
 
+    /// @notice This is the function the buyer uses to buy asset from a seller
+    /// @param _positionHash the hash of a position created by a seller, this might serve as a transaction ID
+    /// @param _buyerAddress The destination address the buyer wants to receive the assets in
+    /// @param _destinationP2pSwapContractAddress The address of the destionation p2p swap contract, this contract acts as an escrow to swap assets
+    /// @param _amount The amount the buyer is willing to pay
+    /// @param _destinationChainSelector the chainlink chain selector for destination chain
     function buyAsset(
         bytes32 _positionHash,
         address _buyerAddress,
@@ -140,7 +161,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint256 _amount,
         uint64 _destinationChainSelector
     ) external {
-        Position memory position = openPositions[_positionHash];
+        Position memory position = s_openPositions[_positionHash];
         uint256 amountToReceive =
             _calculateAmountToReceive(position.assetSelling, position.assetReceiving, position.exchangeRate, _amount);
         BuyOrder memory buyOrder = BuyOrder({
@@ -166,10 +187,13 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         );
     }
 
+    /// @notice A function called by the seller to withdraw deposited assets
+    /// @param _asset the address of the asset to be withdrawn
+    /// @param _amountToWithdraw the amount to witdraw
     function witdrawAsset(address _asset, uint256 _amountToWithdraw) external {
-        if (sellerDepositedAssets[_asset][msg.sender] >= _amountToWithdraw) {
-            sellerDepositedAssets[_asset][msg.sender] -= _amountToWithdraw;
-            IERC20(_asset).transfer(msg.sender, _amount);
+        if (s_sellerDepositedAssets[_asset][msg.sender] >= _amountToWithdraw) {
+            s_sellerDepositedAssets[_asset][msg.sender] -= _amountToWithdraw;
+            IERC20(_asset).transfer(msg.sender, _amountToWithdraw);
         }
         revert P2pSwap__InsufficientBalanceToWithdraw(_amountToWithdraw);
     }
@@ -182,6 +206,13 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     /// Internal and private functions  //
     /////////////////////////////////////
 
+    /// @notice This function is used to get the amount of asset a buyer will get when transfers a specific amount of his asset
+    /// @dev this function takes into consideration the exchange rate added by the seller
+    /// @param _sellingAsset the address of the asset to be sold
+    /// @param _buyingAsset the address of the asset to be bought
+    /// @param _sellerExchangeRate the exchange rate added by the seller
+    /// @param _amountToBuy the amount the buyer is depositing/transfering
+    /// @return returns the calculated amount
     function _calculateAmountToReceive(
         address _sellingAsset,
         address _buyingAsset,
@@ -195,6 +226,11 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         return equivalentAssetForBuyingAsset - amountToDeductFromEquivalentAsset;
     }
 
+    /// @notice This function is used to get the normal exchange rate of SELLING ASSET/BUYING ASSET
+    /// @dev this function uses chainlink oracle to get the latest price of assets
+    /// @param _assetA the base asset
+    /// @param _assetB the quote asset
+    /// @return returns the normal exchange rate
     function _getNormalExchangeRate(address _assetA, address _assetB) internal view returns (uint256) {
         uint8 assetADecimal = feedRegistry.decimals(_assetA, Denominations.USD);
         uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / (10 ** assetADecimal);
@@ -209,6 +245,10 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         return (priceOfAssetAInUsd) / priceOfAssetBInUsd;
     }
 
+
+    /// @dev this function handles any message received from cross chain
+    /// @dev this is called by the chainlink router
+    /// @param message this is the message coming from the cross chain
     function _ccipReceive(Client.Any2EVMMessage memory message) internal virtual override {
         bytes memory receivedMessage = message.data; // abi-decoding of the sent message
         Client.EVMTokenAmount[] memory asset = message.destTokenAmounts;
@@ -217,19 +257,25 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             Position memory swapPosition = abi.decode(receivedMessage, (Position));
             bytes32 swapPositionHash = keccak256(abi.encode(swapPosition));
 
-            openPositions[swapPositionHash] = swapPosition;
-            numberOfOpenPositions++;
+            s_openPositions[swapPositionHash] = swapPosition;
+            emit P2pSwap__PositionCreated(
+                message.messageId,
+                swapPosition.assetSelling,
+                swapPosition.assetReceiving,
+                swapPosition.destinationChainSelector
+            );
+            s_numberOfOpenPositions++;
         } else if (asset.length != 0 && receivedMessage.length != 0) {
             BuyOrder memory buyOrder = abi.decode(receivedMessage, (BuyOrder));
 
-            uint256 sellerAssetAmount = sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller];
+            uint256 sellerAssetAmount = s_sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller];
             console.log("Seller asset: ", buyOrder.assetBought);
             console.log("Buyer amount to receive: ", buyOrder.amountToReceive);
             console.log("Seller amount selling:", sellerAssetAmount);
 
             if (sellerAssetAmount >= buyOrder.amountToReceive) {
                 console.log("Exchaining Assets...");
-                sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller] -= buyOrder.amountToReceive;
+                s_sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller] -= buyOrder.amountToReceive;
                 // send to buyer
                 bool success = IERC20(buyOrder.assetBought).transfer(buyOrder.buyerReceivingAddress, buyOrder.amountToReceive);
                 if (success) {
@@ -248,10 +294,15 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
                 _refundBuyer(buyOrder.buyerChainSelector, buyOrder.buyer, buyOrder.assetUsedToBuy, buyOrder.amountPaid);
             }
         } else {
-            revert();
+            revert P2pSwap__UnknownError();
         }
     }
 
+    /// @notice This function refunds the buyer if swap fails
+    /// @param _buyerDestinationChainSelector The chainlink chain selector where the buyer is
+    /// @param _buyerAddress the address of the buyer
+    /// @param _buyerAsset the asset to refund to the buyer
+    /// @param _assetAmount the amount to refund
     function _refundBuyer(
         uint64 _buyerDestinationChainSelector,
         address _buyerAddress,
@@ -261,33 +312,36 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         _transferAsset(_buyerDestinationChainSelector, _buyerAddress, _buyerAsset, _assetAmount, new bytes(0));
     }
 
+
+    /// @dev This function handles the transfer of asset
     function _transferAsset(
         uint64 _destinationChainSelector,
-        address _destinationP2pSwapContractAddress,
+        address _destinationAddress,
         address _assetAddress,
         uint256 _assetAmount,
         bytes memory data
     ) internal returns (bytes32 messageId) {
         Client.EVM2AnyMessage memory evm2AnyMessage =
-            _buildCCIPMessage(_destinationP2pSwapContractAddress, _assetAddress, _assetAmount, address(0), data);
+            _buildCCIPMessage(_destinationAddress, _assetAddress, _assetAmount, address(0), data);
 
         IRouterClient router = IRouterClient(this.getRouter());
 
         uint256 fees = router.getFee(_destinationChainSelector, evm2AnyMessage);
 
         if (fees > address(this).balance) {
-            revert NotEnoughBalance(address(this).balance, fees);
+            revert P2pSwap__NotEnoughBalance(address(this).balance, fees);
         }
 
         IERC20(_assetAddress).approve(address(router), _assetAmount);
         messageId = router.ccipSend{value: fees}(_destinationChainSelector, evm2AnyMessage);
 
-        emit AssetTransfer(messageId, _destinationP2pSwapContractAddress, _assetAddress);
+        emit P2pSwap__AssetTransfer(messageId, _destinationAddress, _assetAddress);
 
         // Return the message ID
         return messageId;
     }
 
+    /// @dev uses chainlink ccip to send arbitary message to destination chain
     function _sendMessage(
         uint64 _destinationChainSelector,
         address _destinationP2pSwapContractAddress,
@@ -300,11 +354,11 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint256 fees = router.getFee(_destinationChainSelector, evm2AnyMessage);
 
         if (fees > address(this).balance) {
-            revert NotEnoughBalance(address(this).balance, fees);
+            revert P2pSwap__NotEnoughBalance(address(this).balance, fees);
         }
         messageId = router.ccipSend(_destinationChainSelector, evm2AnyMessage);
 
-        emit MessageSent(
+        emit P2pSwap__MessageSent(
             messageId, _destinationChainSelector, _destinationP2pSwapContractAddress, _message, address(0), fees
         );
         return messageId;
@@ -356,7 +410,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     ///////////////////////////////
 
     function getTotalNumberOfOpenPositions() public view returns (uint256) {
-        return numberOfOpenPositions;
+        return s_numberOfOpenPositions;
     }
 
     function getPositionFromPositionHash(bytes32 positionHash)
@@ -372,7 +426,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             uint64 destinationChainSelector
         )
     {
-        Position memory position = openPositions[positionHash];
+        Position memory position = s_openPositions[positionHash];
 
         sellerAddress = position.sellerAddress;
         sellingFrom = position.sellingFrom;
@@ -384,7 +438,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     }
 
     function getBalanceOfDepositedAsset(address _assetAddress) public view returns (uint256) {
-        return sellerDepositedAssets[_assetAddress][msg.sender];
+        return s_sellerDepositedAssets[_assetAddress][msg.sender];
     }
 
     function getAmountToReceiveFromBuying(
