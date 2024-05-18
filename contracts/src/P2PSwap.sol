@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.19;
+pragma solidity ^0.8.19;
+pragma abicoder v2;
 
-import {IRouterClient} from "@chainlink-ccip/ccip/interfaces/IRouterClient.sol";
-import {OwnerIsCreator} from "@chainlink-ccip/shared/access/OwnerIsCreator.sol";
-import {Client} from "@chainlink-ccip/ccip/libraries/Client.sol";
+import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {console} from "forge-std/console.sol";
+import {OwnerIsCreator} from "@chainlink/contracts-ccip/src/v0.8/shared/access/OwnerIsCreator.sol";
+import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 
-import {CCIPReceiver} from "@chainlink-ccip/ccip/applications/CCIPReceiver.sol";
-import {IERC20} from "@chainlink-ccip/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@chainlink-ccip/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/utils/SafeERC20.sol";
+import {CCIPReceiver} from "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
+import {IERC20} from
+    "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from
+    "@chainlink/contracts-ccip/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {FeedRegistryInterface} from "@chainlink/interfaces/FeedRegistryInterface.sol";
-import {Denominations} from "@chainlink/Denominations.sol";
+import {FeedRegistryInterface} from "@chainlink/brownie/interfaces/FeedRegistryInterface.sol";
+import {Denominations} from "@chainlink/brownie/Denominations.sol";
 
 contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     using SafeERC20 for IERC20;
@@ -20,7 +24,8 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     // Errors
     /////////////
     error NotEnoughBalance(uint256 contractBalance, uint256 fees);
-    error P2pSwap_ExceededNormalExchangeRate();
+    error P2pSwap__ExceededNormalExchangeRate();
+    error P2pSwap__InSufficientBalanceToWithdraw(uint256 amount);
 
     //////////////
     // Events
@@ -50,17 +55,11 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint64 destinationChainSelector
     );
 
-    struct Transaction {
-        uint256 senderAmount;
-        uint256 receiverAmount;
-        address senderAsset;
-        address receiverAsset;
-    }
-
     struct BuyOrder {
         address buyer;
         address buyerReceivingAddress;
         address seller;
+        address sellerReceivingAddress;
         address assetUsedToBuy;
         address assetBought;
         uint256 amountPaid;
@@ -68,16 +67,9 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint64 buyerChainSelector;
     }
 
-    struct Escrow {
-        address sender;
-        address receiver;
-        address senderAsset;
-        address receiverAsset;
-        uint256 senderAmount;
-    }
-
     struct Position {
-        address sellerAddress; // the wallet address of the seller
+        address sellerAddress;
+        address sellerReceivingAddress; // the wallet address of the seller
         uint256 sellingFrom; // chain ID of the blockchain the seller is selling from
         address assetSelling; // the address of the asset the seller is selling
         address assetReceiving; // the address of the asset the seller wants to receive in exchange of the asset he is selling, in otherwords this is the asset the buyer will pay with
@@ -88,14 +80,15 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     /// @notice This holds all the assets available for buying/swapping on the blockchain that this
     /// contract will be deployed on
     /// @dev The position hash will be the keccak256 hash of the created position struct
-    mapping(bytes32 positionHash => Position) openPositions;
+    mapping(bytes32 positionHash => Position) public openPositions;
+    uint256 private numberOfOpenPositions = 0;
 
     mapping(bytes32 transactionId => Transaction transaction) private transactions;
-    mapping(address asset => mapping(address seller => uint256 amount)) sellerDepositedAssets;
+    mapping(address asset => mapping(address seller => uint256 amount)) public sellerDepositedAssets;
     FeedRegistryInterface internal feedRegistry;
     uint256 messageGasLimit = 200_000;
-    IRouterClient router = IRouterClient(this.getRouter());
-    uint256 private immutable CHAIN_ID;
+
+    uint256 public immutable CHAIN_ID;
     uint8 constant MAXIMUM_EXCHANGE_RATE = 10;
     uint256 constant DECIMALS = 1e18;
 
@@ -103,46 +96,6 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         feedRegistry = FeedRegistryInterface(_registry);
         CHAIN_ID = block.chainid;
     }
-
-    // /// @notice This Function is used to swap a user's asset on a blockChain with another asset on another blockchain
-    // /// @dev This contract locks the assets to swap until the other party has released his asset for swapping
-    // /// @param _fromAsset the address of the senders asset to swap
-    // /// @param _toAsset the address of the receivers asset to swap
-    // /// @param _amount the amount of the asset to swap
-    // /// @param _recepientAddress the address of the receipient on the destination blockchain
-    // /// @param _destinationChainSelector the chainlink chain identifier for the destination blockchain
-    // /// @param _destinationP2pSwapContractAddress the destination receiver p2p contract address
-    // function swapAssets(
-    //     address _fromAsset,
-    //     address _toAsset,
-    //     uint256 _amount,
-    //     address _recepientAddress,
-    //     uint64 _destinationChainSelector,
-    //     address _destinationP2pSwapContractAddress
-    // ) public {
-    //     IERC20(_fromAsset).transferFrom(msg.sender, address(this), _amount);
-
-    //     Escrow memory escrowDetails = Escrow({
-    //         sender: msg.sender,
-    //         receiver: _recepientAddress,
-    //         senderAsset: _fromAsset,
-    //         receiverAsset: _toAsset,
-    //         senderAmount: _amount
-    //     });
-
-    //     bytes memory endcodedEscrowDetails = abi.encode(escrowDetails);
-    //     bytes32 transactionId = keccak256(endcodedEscrowDetails);
-
-    //     Transaction storage transaction = transactions[transactionId];
-    //     transaction.senderAmount = _amount;
-    //     transaction.senderAsset = _fromAsset;
-
-    //     _sendMessage(_destinationChainSelector, _destinationP2pSwapContractAddress, abi.encode(transaction));
-
-    //     if (transaction.receiverAsset != address(0) && transaction.receiverAmount != 0) {
-    //         IERC20(_fromAsset).approve(address(router), _amount);
-    //     }
-    // }
 
     //////////////////////////////////////
     // public and external functions ////
@@ -155,16 +108,17 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint256 _amountOfAssetToSell,
         uint8 _sellingRatePercentage,
         uint64 _destinationChainSelector
-    ) external {
-        if(_sellingRatePercentage > MAXIMUM_EXCHANGE_RATE){
-            revert P2pSwap_ExceededNormalExchangeRate();
+    ) external returns (bytes32) {
+        if (_sellingRatePercentage > MAXIMUM_EXCHANGE_RATE) {
+            revert P2pSwap__ExceededNormalExchangeRate();
         }
 
         sellerDepositedAssets[_sellingAsset][msg.sender] = _amountOfAssetToSell;
-        IERC20(_sellingAsset).transferFrom(msg.sender, msg.sender, _amountOfAssetToSell);
+        IERC20(_sellingAsset).transferFrom(msg.sender, address(this), _amountOfAssetToSell);
 
         Position memory swapPosition = Position({
-            sellerAddress: _sellerAddress,
+            sellerAddress: msg.sender,
+            sellerReceivingAddress: _sellerAddress,
             sellingFrom: CHAIN_ID,
             assetSelling: _sellingAsset,
             assetReceiving: _receiveingAsset,
@@ -173,8 +127,10 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         });
 
         bytes memory positionData = abi.encode(swapPosition);
+        bytes32 positionHash = keccak256(positionData);
 
         _sendMessage(_destinationChainSelector, _destinationP2pSwapContractAddress, positionData);
+        return positionHash;
     }
 
     function buyAsset(
@@ -184,20 +140,38 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint256 _amount,
         uint64 _destinationChainSelector
     ) external {
-       
         Position memory position = openPositions[_positionHash];
-        uint256 amountToReceive = _calculateAmountToReceive(position.assetSelling, position.assetReceiving, position.exchangeRate, _amount);
-         BuyOrder memory buyOrder = BuyOrder({
+        uint256 amountToReceive =
+            _calculateAmountToReceive(position.assetSelling, position.assetReceiving, position.exchangeRate, _amount);
+        BuyOrder memory buyOrder = BuyOrder({
             buyer: msg.sender,
             buyerReceivingAddress: _buyerAddress,
             seller: position.sellerAddress,
+            sellerReceivingAddress: position.sellerReceivingAddress,
             assetUsedToBuy: position.assetReceiving,
             assetBought: position.assetSelling,
             amountPaid: _amount,
             amountToReceive: amountToReceive,
             buyerChainSelector: position.destinationChainSelector
         });
-        _transferAsset(_destinationChainSelector, _destinationP2pSwapContractAddress,position.assetReceiving , _amount, abi.encode(buyOrder));
+
+        IERC20(position.assetReceiving).transferFrom(msg.sender, address(this), _amount);
+
+        _transferAsset(
+            _destinationChainSelector,
+            _destinationP2pSwapContractAddress,
+            position.assetReceiving,
+            _amount,
+            abi.encode(buyOrder)
+        );
+    }
+
+    function witdrawAsset(address _asset, uint256 _amountToWithdraw) external {
+        if (sellerDepositedAssets[_asset][msg.sender] >= _amountToWithdraw) {
+            sellerDepositedAssets[_asset][msg.sender] -= _amountToWithdraw;
+            IERC20(_asset).transfer(msg.sender, _amount);
+        }
+        revert P2pSwap__InsufficientBalanceToWithdraw(_amountToWithdraw);
     }
 
     function changeMessageGasLimit(uint256 _newMessageGasLimit) public onlyOwner {
@@ -207,57 +181,76 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     //////////////////////////////////////
     /// Internal and private functions  //
     /////////////////////////////////////
-    
+
     function _calculateAmountToReceive(
         address _sellingAsset,
         address _buyingAsset,
         uint8 _sellerExchangeRate,
         uint256 _amountToBuy
-    ) internal view  returns (uint256) {
+    ) internal view returns (uint256) {
         uint256 normalExchangeRate = _getNormalExchangeRate(_sellingAsset, _buyingAsset);
         uint256 equivalentAssetForBuyingAsset = _amountToBuy * normalExchangeRate;
 
-        uint256 amountToDeductFromEquivalentAsset = (_sellerExchangeRate * equivalentAssetForBuyingAsset)/100;
+        uint256 amountToDeductFromEquivalentAsset = (_sellerExchangeRate * equivalentAssetForBuyingAsset) / 100;
         return equivalentAssetForBuyingAsset - amountToDeductFromEquivalentAsset;
     }
 
-    function _getNormalExchangeRate(address _assetA, address _assetB) internal view returns (uint256){
-        uint8 assetADecimal =  feedRegistry.decimals(_assetA, Denominations.USD);
-        uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / assetADecimal;
-        
-        uint8 assetBDecimal = feedRegistry.decimals(_assetB, Denominations.USD);
-        uint256 priceOfAssetBInUsd = getAssetValueInUsd(_assetB, assetBDecimal);
+    function _getNormalExchangeRate(address _assetA, address _assetB) internal view returns (uint256) {
+        uint8 assetADecimal = feedRegistry.decimals(_assetA, Denominations.USD);
+        uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / (10 ** assetADecimal);
 
-        return (priceOfAssetAInUsd * DECIMALS)/priceOfAssetBInUsd;
+        console.log("Price of seller asset in usd: ", priceOfAssetAInUsd);
+
+        uint8 assetBDecimal = feedRegistry.decimals(_assetB, Denominations.USD);
+        uint256 priceOfAssetBInUsd = getAssetValueInUsd(_assetB, 1) / (10 ** assetBDecimal);
+
+        console.log("Price of buyer asset in usd: ", priceOfAssetBInUsd);
+
+        return (priceOfAssetAInUsd) / priceOfAssetBInUsd;
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal virtual override {
         bytes memory receivedMessage = message.data; // abi-decoding of the sent message
-        address asset = message.destTokenAmounts[0].token;
+        Client.EVMTokenAmount[] memory asset = message.destTokenAmounts;
 
-        if (asset == address(0) && receivedMessage.length != 0) {
+        if (asset.length == 0 && receivedMessage.length != 0) {
             Position memory swapPosition = abi.decode(receivedMessage, (Position));
             bytes32 swapPositionHash = keccak256(abi.encode(swapPosition));
 
             openPositions[swapPositionHash] = swapPosition;
-        } else if (asset != address(0) && receivedMessage.length != 0) {
+            numberOfOpenPositions++;
+        } else if (asset.length != 0 && receivedMessage.length != 0) {
             BuyOrder memory buyOrder = abi.decode(receivedMessage, (BuyOrder));
+
             uint256 sellerAssetAmount = sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller];
+            console.log("Seller asset: ", buyOrder.assetBought);
+            console.log("Buyer amount to receive: ", buyOrder.amountToReceive);
+            console.log("Seller amount selling:", sellerAssetAmount);
+
             if (sellerAssetAmount >= buyOrder.amountToReceive) {
+                console.log("Exchaining Assets...");
                 sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller] -= buyOrder.amountToReceive;
-                bool success = IERC20(buyOrder.assetBought).transfer(buyOrder.buyer, buyOrder.amountToReceive);
-                if (success){
-                    IERC20(buyOrder.assetUsedToBuy).transfer(buyOrder.seller, buyOrder.amountPaid);
+                // send to buyer
+                bool success = IERC20(buyOrder.assetBought).transfer(buyOrder.buyerReceivingAddress, buyOrder.amountToReceive);
+                if (success) {
+                   // send to sender
+                    _transferAsset(
+                        buyOrder.buyerChainSelector,
+                        buyOrder.sellerReceivingAddress,
+                        buyOrder.assetUsedToBuy,
+                        buyOrder.amountPaid,
+                        new bytes(0)
+                    );
                 }
             } else {
                 // refund buyer his asset
+                console.log("Refunding Buyer");
                 _refundBuyer(buyOrder.buyerChainSelector, buyOrder.buyer, buyOrder.assetUsedToBuy, buyOrder.amountPaid);
             }
         } else {
             revert();
         }
     }
-
 
     function _refundBuyer(
         uint64 _buyerDestinationChainSelector,
@@ -277,6 +270,8 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     ) internal returns (bytes32 messageId) {
         Client.EVM2AnyMessage memory evm2AnyMessage =
             _buildCCIPMessage(_destinationP2pSwapContractAddress, _assetAddress, _assetAmount, address(0), data);
+
+        IRouterClient router = IRouterClient(this.getRouter());
 
         uint256 fees = router.getFee(_destinationChainSelector, evm2AnyMessage);
 
@@ -300,6 +295,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     ) internal returns (bytes32 messageId) {
         Client.EVM2AnyMessage memory evm2AnyMessage =
             _buildCCIPMessage(_destinationP2pSwapContractAddress, address(0), 0, address(0), _message);
+        IRouterClient router = IRouterClient(this.getRouter());
 
         uint256 fees = router.getFee(_destinationChainSelector, evm2AnyMessage);
 
@@ -344,16 +340,59 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             receiver: abi.encode(_receiver), // ABI-encoded receiver address
             data: message, // No data
             tokenAmounts: assetAmount, // The amount and type of token being transferred
-            extraArgs: Client._argsToBytes(
-                Client.EVMExtraArgsV1({gasLimit: gasLimitToUse})
-                ),
+            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV1({gasLimit: gasLimitToUse})),
             feeToken: _feeTokenAddress
         });
     }
 
-    function getAssetValueInUsd(address _assetAddress, uint256 _amount) internal view returns (uint256) {
+    function getAssetValueInUsd(address _assetAddress, uint256 _amount) public view returns (uint256) {
         (, int256 answer,,,) = feedRegistry.latestRoundData(_assetAddress, Denominations.USD);
 
         return uint256(answer) * _amount;
+    }
+
+    ////////////////////////////////
+    // Public and getter functions
+    ///////////////////////////////
+
+    function getTotalNumberOfOpenPositions() public view returns (uint256) {
+        return numberOfOpenPositions;
+    }
+
+    function getPositionFromPositionHash(bytes32 positionHash)
+        public
+        view
+        returns (
+            address sellerAddress,
+            uint256 sellingFrom,
+            address assetSelling,
+            address assetReceiving,
+            address sellerReceivingAddress,
+            uint8 exchangeRate,
+            uint64 destinationChainSelector
+        )
+    {
+        Position memory position = openPositions[positionHash];
+
+        sellerAddress = position.sellerAddress;
+        sellingFrom = position.sellingFrom;
+        assetSelling = position.assetSelling;
+        assetReceiving = position.assetReceiving;
+        sellerReceivingAddress = position.sellerReceivingAddress;
+        exchangeRate = position.exchangeRate;
+        destinationChainSelector = position.destinationChainSelector;
+    }
+
+    function getBalanceOfDepositedAsset(address _assetAddress) public view returns (uint256) {
+        return sellerDepositedAssets[_assetAddress][msg.sender];
+    }
+
+    function getAmountToReceiveFromBuying(
+        address _sellingAsset,
+        address _buyingAsset,
+        uint8 _sellerExchangeRate,
+        uint256 _amountToBuy
+    ) public view returns (uint256) {
+        return _calculateAmountToReceive(_sellingAsset, _buyingAsset, _sellerExchangeRate, _amountToBuy);
     }
 }
