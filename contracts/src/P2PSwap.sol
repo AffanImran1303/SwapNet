@@ -24,7 +24,8 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     // Errors
     /////////////
     error NotEnoughBalance(uint256 contractBalance, uint256 fees);
-    error P2pSwap_ExceededNormalExchangeRate();
+    error P2pSwap__ExceededNormalExchangeRate();
+    error P2pSwap__InSufficientBalanceToWithdraw(uint256 amount);
 
     //////////////
     // Events
@@ -109,7 +110,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         uint64 _destinationChainSelector
     ) external returns (bytes32) {
         if (_sellingRatePercentage > MAXIMUM_EXCHANGE_RATE) {
-            revert P2pSwap_ExceededNormalExchangeRate();
+            revert P2pSwap__ExceededNormalExchangeRate();
         }
 
         sellerDepositedAssets[_sellingAsset][msg.sender] = _amountOfAssetToSell;
@@ -163,6 +164,14 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             _amount,
             abi.encode(buyOrder)
         );
+    }
+
+    function witdrawAsset(address _asset, uint256 _amountToWithdraw) external {
+        if (sellerDepositedAssets[_asset][msg.sender] >= _amountToWithdraw) {
+            sellerDepositedAssets[_asset][msg.sender] -= _amountToWithdraw;
+            IERC20(_asset).transfer(msg.sender, _amount);
+        }
+        revert P2pSwap__InsufficientBalanceToWithdraw(_amountToWithdraw);
     }
 
     function changeMessageGasLimit(uint256 _newMessageGasLimit) public onlyOwner {
