@@ -67,6 +67,23 @@ contract P2PSwapTest is Test {
         _;
     }
 
+    function createSwapPostion() internal returns (bytes32) {
+        uint8 sellerExchangeRate = 5;
+        vm.startPrank(SELLER_1);
+        sellerAsset.approve(address(sellerContract), AMOUNT_OF_ASSET_TO_SELL);
+        bytes32 positionHash = sellerContract.createSwapPosition(
+            address(sellerAsset),
+            address(buyerAsset),
+            address(buyerContract),
+            SELLER_1_DESTINATION_ADDRESS,
+            AMOUNT_OF_ASSET_TO_SELL,
+            sellerExchangeRate,
+            destinationChainSelector
+        );
+        vm.stopPrank();
+        return positionHash;
+    }
+
     function testCreateSwapPosition() public giveSellerSomeAssetToSell(SELLER_1) {
         uint256 totalNumberOfPositionsInBuyerContractBeforeSwap = buyerContract.getTotalNumberOfOpenPositions();
         uint8 sellerExchangeRate = 5;
@@ -99,12 +116,14 @@ contract P2PSwapTest is Test {
             uint256 sellingFrom,
             address assetSelling,
             address assetReceiving,
+            address sellerReceivingAddress,
             uint8 exchangeRate,
             uint64 destinationChainSelectorFromBuyerContract
         ) = buyerContract.getPositionFromPositionHash(positionHash);
 
         assertEq(totalNumberOfPositionsInBuyerContractBeforeSwap + 1, totalNumberOfPositionsInBuyerContracAfterSwap);
-        assertEq(sellerAddress, SELLER_1_DESTINATION_ADDRESS);
+        assertEq(sellerAddress, SELLER_1);
+        assertEq(sellerReceivingAddress, SELLER_1_DESTINATION_ADDRESS);
         assertEq(sellingFrom, sellerContract.CHAIN_ID());
         assertEq(assetSelling, address(sellerAsset));
         assertEq(assetReceiving, address(buyerAsset));
@@ -115,6 +134,42 @@ contract P2PSwapTest is Test {
         assertEq(AMOUNT_OF_ASSET_TO_SELL, sellerContract.getBalanceOfDepositedAsset(address(sellerAsset)));
     }
 
+    function testBuyAsset() public giveSellerSomeAssetToSell(SELLER_1) {
+        bytes32 positionHash = createSwapPostion();
+        uint256 amountUsedToBuy = 40;
+        uint256 amountBuyerShouldReceiveOnDestinationChain = buyerContract.getAmountToReceiveFromBuying(address(sellerAsset), address(buyerAsset), 5, amountUsedToBuy);
+        uint256 balanceOfSellerBeforeBuyerBoughtOnDestinationChain = buyerAsset.balanceOf(SELLER_1_DESTINATION_ADDRESS);
+        uint256 balanceOfBuyerBeforeBuyingOnDestinationChain = sellerAsset.balanceOf(BUYER_1_DESTINATION_ADDRESS); 
+
+        buyerAsset.drip(BUYER_1);
+        vm.startPrank(BUYER_1);
+
+        uint256 balanceOFBuyerBeforeBuyingOnHisOwnChain = buyerAsset.balanceOf(BUYER_1);
+        console.log("Balance of buyer before buying:", balanceOFBuyerBeforeBuyingOnHisOwnChain);
+
+        buyerAsset.approve(address(buyerContract), amountUsedToBuy);
+        buyerContract.buyAsset(
+            positionHash,
+            BUYER_1_DESTINATION_ADDRESS,
+            address(sellerContract),
+            amountUsedToBuy,
+            destinationChainSelector
+        );
+
+        uint256 balanceOfBuyerAfterBuying = buyerAsset.balanceOf(BUYER_1);
+        uint256 balanceOfSellerAfterBuyerBoughtOnDestinationChain = buyerAsset.balanceOf(SELLER_1_DESTINATION_ADDRESS);
+        uint256 balanceOfBuyerAfterBuyingOnDestinationChain = sellerAsset.balanceOf(BUYER_1_DESTINATION_ADDRESS);
+
+        console.log("Balance of buyer after buying", balanceOfBuyerAfterBuying);
+
+        assertEq(balanceOfBuyerAfterBuying + amountUsedToBuy, balanceOFBuyerBeforeBuyingOnHisOwnChain);
+        assertEq(balanceOfSellerAfterBuyerBoughtOnDestinationChain, balanceOfSellerBeforeBuyerBoughtOnDestinationChain + amountUsedToBuy);
+        assertEq(balanceOfBuyerBeforeBuyingOnDestinationChain + amountBuyerShouldReceiveOnDestinationChain, balanceOfBuyerAfterBuyingOnDestinationChain);
+        vm.stopPrank();
+        vm.prank(SELLER_1);
+        assertEq(sellerContract.getBalanceOfDepositedAsset(address(sellerAsset)), AMOUNT_OF_ASSET_TO_SELL - amountBuyerShouldReceiveOnDestinationChain);
+    }
+
     function testGetAssetValueInUsd() public view {
         uint256 expectedValueInUsd = 10e18;
         uint256 actualValueInUsd = sellerContract.getAssetValueInUsd(address(sellerAsset), 1);
@@ -123,7 +178,7 @@ contract P2PSwapTest is Test {
     }
 
     function testCalculateAmountToReceiveFromBuying() public view {
-        uint256 expectedAmountToReceive = 76e18;
+        uint256 expectedAmountToReceive = 76;
         uint256 actualAmountToReceive =
             buyerContract.getAmountToReceiveFromBuying(address(sellerAsset), address(buyerAsset), 5, 40);
 

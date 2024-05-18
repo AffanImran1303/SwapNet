@@ -24,15 +24,17 @@ contract MockV3Aggregator {
         updateAnswer(_initialAnswer);
     }
 
-    function decimals(address _baseToken , address _quoteToken) public view returns (uint256){
+    function decimals(address _baseToken, address _quoteToken) public view returns (uint256) {
         return getDecimalsForTokenPair[_baseToken][_quoteToken];
     }
 
-    function updateAnswerForTokenPair(address _baseToken, address _quoteToken, int256 _answer, uint8 _decimals) public {
+    function updateAnswerForTokenPair(address _baseToken, address _quoteToken, int256 _answer, uint8 _decimals)
+        public
+    {
         latestAnswer = _answer;
         latestTimestamp = block.timestamp;
         getAnswerForTokenPair[_baseToken][_quoteToken] = _answer;
-        getDecimalsForTokenPair[_baseToken][_quoteToken ] = _decimals;
+        getDecimalsForTokenPair[_baseToken][_quoteToken] = _decimals;
     }
 
     function updateAnswer(int256 _answer) public {

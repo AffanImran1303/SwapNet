@@ -27,8 +27,12 @@ contract HelperConfig is Script {
 
     function createAnvilNetworkConfiguration() public returns (NetworkConfig memory) {
         MockV3Aggregator feedRegistry = new MockV3Aggregator(DECIMALS, PRICE_FOR_CCIPBNM_IN_USD);
-        feedRegistry.updateAnswerForTokenPair(CCIPBNM_TOKEN_ADDRESS, Denominations.USD, PRICE_FOR_CCIPBNM_IN_USD, DECIMALS);
-        feedRegistry.updateAnswerForTokenPair(CCIPLNM_TOKEN_ADDRESS, Denominations.USD, PRICE_FOR_CCIPLNM_IN_USD, DECIMALS);
+        feedRegistry.updateAnswerForTokenPair(
+            CCIPBNM_TOKEN_ADDRESS, Denominations.USD, PRICE_FOR_CCIPBNM_IN_USD, DECIMALS
+        );
+        feedRegistry.updateAnswerForTokenPair(
+            CCIPLNM_TOKEN_ADDRESS, Denominations.USD, PRICE_FOR_CCIPLNM_IN_USD, DECIMALS
+        );
 
         return NetworkConfig({feedRegistry: address(feedRegistry)});
     }

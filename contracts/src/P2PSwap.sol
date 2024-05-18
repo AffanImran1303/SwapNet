@@ -65,6 +65,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         address buyer;
         address buyerReceivingAddress;
         address seller;
+        address sellerReceivingAddress;
         address assetUsedToBuy;
         address assetBought;
         uint256 amountPaid;
@@ -81,7 +82,8 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     }
 
     struct Position {
-        address sellerAddress; // the wallet address of the seller
+        address sellerAddress;
+        address sellerReceivingAddress; // the wallet address of the seller
         uint256 sellingFrom; // chain ID of the blockchain the seller is selling from
         address assetSelling; // the address of the asset the seller is selling
         address assetReceiving; // the address of the asset the seller wants to receive in exchange of the asset he is selling, in otherwords this is the asset the buyer will pay with
@@ -109,8 +111,6 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         CHAIN_ID = block.chainid;
     }
 
-
-
     //////////////////////////////////////
     // public and external functions ////
     /////////////////////////////////////
@@ -131,7 +131,8 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         IERC20(_sellingAsset).transferFrom(msg.sender, address(this), _amountOfAssetToSell);
 
         Position memory swapPosition = Position({
-            sellerAddress: _sellerAddress,
+            sellerAddress: msg.sender,
+            sellerReceivingAddress: _sellerAddress,
             sellingFrom: CHAIN_ID,
             assetSelling: _sellingAsset,
             assetReceiving: _receiveingAsset,
@@ -160,12 +161,16 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             buyer: msg.sender,
             buyerReceivingAddress: _buyerAddress,
             seller: position.sellerAddress,
+            sellerReceivingAddress: position.sellerReceivingAddress,
             assetUsedToBuy: position.assetReceiving,
             assetBought: position.assetSelling,
             amountPaid: _amount,
             amountToReceive: amountToReceive,
             buyerChainSelector: position.destinationChainSelector
         });
+
+        IERC20(position.assetReceiving).transferFrom(msg.sender, address(this), _amount);
+
         _transferAsset(
             _destinationChainSelector,
             _destinationP2pSwapContractAddress,
@@ -198,16 +203,16 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
 
     function _getNormalExchangeRate(address _assetA, address _assetB) internal view returns (uint256) {
         uint8 assetADecimal = feedRegistry.decimals(_assetA, Denominations.USD);
-        uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / (10**assetADecimal);
+        uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / (10 ** assetADecimal);
 
         console.log("Price of seller asset in usd: ", priceOfAssetAInUsd);
 
         uint8 assetBDecimal = feedRegistry.decimals(_assetB, Denominations.USD);
-        uint256 priceOfAssetBInUsd = getAssetValueInUsd(_assetB, 1) / (10**assetBDecimal);
+        uint256 priceOfAssetBInUsd = getAssetValueInUsd(_assetB, 1) / (10 ** assetBDecimal);
 
         console.log("Price of buyer asset in usd: ", priceOfAssetBInUsd);
 
-        return (priceOfAssetAInUsd * DECIMALS) / priceOfAssetBInUsd;
+        return (priceOfAssetAInUsd) / priceOfAssetBInUsd;
     }
 
     function _ccipReceive(Client.Any2EVMMessage memory message) internal virtual override {
@@ -222,15 +227,30 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             numberOfOpenPositions++;
         } else if (asset.length != 0 && receivedMessage.length != 0) {
             BuyOrder memory buyOrder = abi.decode(receivedMessage, (BuyOrder));
+
             uint256 sellerAssetAmount = sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller];
+            console.log("Seller asset: ", buyOrder.assetBought);
+            console.log("Buyer amount to receive: ", buyOrder.amountToReceive);
+            console.log("Seller amount selling:", sellerAssetAmount);
+
             if (sellerAssetAmount >= buyOrder.amountToReceive) {
+                console.log("Exchaining Assets...");
                 sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller] -= buyOrder.amountToReceive;
-                bool success = IERC20(buyOrder.assetBought).transfer(buyOrder.buyer, buyOrder.amountToReceive);
+                // send to buyer
+                bool success = IERC20(buyOrder.assetBought).transfer(buyOrder.buyerReceivingAddress, buyOrder.amountToReceive);
                 if (success) {
-                    IERC20(buyOrder.assetUsedToBuy).transfer(buyOrder.seller, buyOrder.amountPaid);
+                   // send to sender
+                    _transferAsset(
+                        buyOrder.buyerChainSelector,
+                        buyOrder.sellerReceivingAddress,
+                        buyOrder.assetUsedToBuy,
+                        buyOrder.amountPaid,
+                        new bytes(0)
+                    );
                 }
             } else {
                 // refund buyer his asset
+                console.log("Refunding Buyer");
                 _refundBuyer(buyOrder.buyerChainSelector, buyOrder.buyer, buyOrder.assetUsedToBuy, buyOrder.amountPaid);
             }
         } else {
@@ -353,6 +373,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
             uint256 sellingFrom,
             address assetSelling,
             address assetReceiving,
+            address sellerReceivingAddress,
             uint8 exchangeRate,
             uint64 destinationChainSelector
         )
@@ -363,6 +384,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         sellingFrom = position.sellingFrom;
         assetSelling = position.assetSelling;
         assetReceiving = position.assetReceiving;
+        sellerReceivingAddress = position.sellerReceivingAddress;
         exchangeRate = position.exchangeRate;
         destinationChainSelector = position.destinationChainSelector;
     }
@@ -376,7 +398,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         address _buyingAsset,
         uint8 _sellerExchangeRate,
         uint256 _amountToBuy
-    ) public view  returns (uint256) {
+    ) public view returns (uint256) {
         return _calculateAmountToReceive(_sellingAsset, _buyingAsset, _sellerExchangeRate, _amountToBuy);
     }
 }
