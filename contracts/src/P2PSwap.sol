@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 pragma abicoder v2;
 
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
+import {console} from "forge-std/console.sol";
 import {OwnerIsCreator} from "@chainlink/contracts-ccip/src/v0.8/shared/access/OwnerIsCreator.sol";
 import {Client} from "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
 
@@ -108,45 +109,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         CHAIN_ID = block.chainid;
     }
 
-    // /// @notice This Function is used to swap a user's asset on a blockChain with another asset on another blockchain
-    // /// @dev This contract locks the assets to swap until the other party has released his asset for swapping
-    // /// @param _fromAsset the address of the senders asset to swap
-    // /// @param _toAsset the address of the receivers asset to swap
-    // /// @param _amount the amount of the asset to swap
-    // /// @param _recepientAddress the address of the receipient on the destination blockchain
-    // /// @param _destinationChainSelector the chainlink chain identifier for the destination blockchain
-    // /// @param _destinationP2pSwapContractAddress the destination receiver p2p contract address
-    // function swapAssets(
-    //     address _fromAsset,
-    //     address _toAsset,
-    //     uint256 _amount,
-    //     address _recepientAddress,
-    //     uint64 _destinationChainSelector,
-    //     address _destinationP2pSwapContractAddress
-    // ) public {
-    //     IERC20(_fromAsset).transferFrom(msg.sender, address(this), _amount);
 
-    //     Escrow memory escrowDetails = Escrow({
-    //         sender: msg.sender,
-    //         receiver: _recepientAddress,
-    //         senderAsset: _fromAsset,
-    //         receiverAsset: _toAsset,
-    //         senderAmount: _amount
-    //     });
-
-    //     bytes memory endcodedEscrowDetails = abi.encode(escrowDetails);
-    //     bytes32 transactionId = keccak256(endcodedEscrowDetails);
-
-    //     Transaction storage transaction = transactions[transactionId];
-    //     transaction.senderAmount = _amount;
-    //     transaction.senderAsset = _fromAsset;
-
-    //     _sendMessage(_destinationChainSelector, _destinationP2pSwapContractAddress, abi.encode(transaction));
-
-    //     if (transaction.receiverAsset != address(0) && transaction.receiverAmount != 0) {
-    //         IERC20(_fromAsset).approve(address(router), _amount);
-    //     }
-    // }
 
     //////////////////////////////////////
     // public and external functions ////
@@ -235,10 +198,14 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
 
     function _getNormalExchangeRate(address _assetA, address _assetB) internal view returns (uint256) {
         uint8 assetADecimal = feedRegistry.decimals(_assetA, Denominations.USD);
-        uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / assetADecimal;
+        uint256 priceOfAssetAInUsd = getAssetValueInUsd(_assetA, 1) / (10**assetADecimal);
+
+        console.log("Price of seller asset in usd: ", priceOfAssetAInUsd);
 
         uint8 assetBDecimal = feedRegistry.decimals(_assetB, Denominations.USD);
-        uint256 priceOfAssetBInUsd = getAssetValueInUsd(_assetB, assetBDecimal);
+        uint256 priceOfAssetBInUsd = getAssetValueInUsd(_assetB, 1) / (10**assetBDecimal);
+
+        console.log("Price of buyer asset in usd: ", priceOfAssetBInUsd);
 
         return (priceOfAssetAInUsd * DECIMALS) / priceOfAssetBInUsd;
     }
@@ -364,7 +331,7 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         });
     }
 
-    function getAssetValueInUsd(address _assetAddress, uint256 _amount) internal view returns (uint256) {
+    function getAssetValueInUsd(address _assetAddress, uint256 _amount) public view returns (uint256) {
         (, int256 answer,,,) = feedRegistry.latestRoundData(_assetAddress, Denominations.USD);
 
         return uint256(answer) * _amount;
@@ -400,7 +367,16 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         destinationChainSelector = position.destinationChainSelector;
     }
 
-    function getBalanceOfDepositedAsset(address _assetAddress) public view returns (uint256){
+    function getBalanceOfDepositedAsset(address _assetAddress) public view returns (uint256) {
         return sellerDepositedAssets[_assetAddress][msg.sender];
+    }
+
+    function getAmountToReceiveFromBuying(
+        address _sellingAsset,
+        address _buyingAsset,
+        uint8 _sellerExchangeRate,
+        uint256 _amountToBuy
+    ) public view  returns (uint256) {
+        return _calculateAmountToReceive(_sellingAsset, _buyingAsset, _sellerExchangeRate, _amountToBuy);
     }
 }

@@ -57,6 +57,9 @@ contract P2PSwapTest is Test {
 
         sellerAsset = ccipBnM;
         buyerAsset = ccipLnM;
+
+        console.log("ccipBnM token address: ", address(ccipBnM));
+        console.log("ccipLnM token address: ", address(ccipLnM));
     }
 
     modifier giveSellerSomeAssetToSell(address seller) {
@@ -107,8 +110,23 @@ contract P2PSwapTest is Test {
         assertEq(assetReceiving, address(buyerAsset));
         assertEq(exchangeRate, sellerExchangeRate);
         assertEq(destinationChainSelectorFromBuyerContract, destinationChainSelector);
-        
+
         vm.prank(SELLER_1);
         assertEq(AMOUNT_OF_ASSET_TO_SELL, sellerContract.getBalanceOfDepositedAsset(address(sellerAsset)));
+    }
+
+    function testGetAssetValueInUsd() public view {
+        uint256 expectedValueInUsd = 10e18;
+        uint256 actualValueInUsd = sellerContract.getAssetValueInUsd(address(sellerAsset), 1);
+
+        assertEq(expectedValueInUsd, actualValueInUsd);
+    }
+
+    function testCalculateAmountToReceiveFromBuying() public view {
+        uint256 expectedAmountToReceive = 76e18;
+        uint256 actualAmountToReceive =
+            buyerContract.getAmountToReceiveFromBuying(address(sellerAsset), address(buyerAsset), 5, 40);
+
+        assertEq(expectedAmountToReceive, actualAmountToReceive);
     }
 }

@@ -7,7 +7,7 @@ import {FeedRegistryInterface} from "@chainlink/brownie/interfaces/FeedRegistryI
 contract MockV3Aggregator {
     uint256 public constant version = 0;
 
-    uint8 public decimals;
+    uint8 public decimal;
     int256 public latestAnswer;
     uint256 public latestTimestamp;
     uint256 public latestRound;
@@ -16,9 +16,23 @@ contract MockV3Aggregator {
     mapping(uint256 => uint256) public getTimestamp;
     mapping(uint256 => uint256) private getStartedAt;
 
+    mapping(address baseToken => mapping(address quoteToken => int256 price)) getAnswerForTokenPair;
+    mapping(address baseToken => mapping(address quoteToken => uint8 decimal)) getDecimalsForTokenPair;
+
     constructor(uint8 _decimals, int256 _initialAnswer) {
-        decimals = _decimals;
+        decimal = _decimals;
         updateAnswer(_initialAnswer);
+    }
+
+    function decimals(address _baseToken , address _quoteToken) public view returns (uint256){
+        return getDecimalsForTokenPair[_baseToken][_quoteToken];
+    }
+
+    function updateAnswerForTokenPair(address _baseToken, address _quoteToken, int256 _answer, uint8 _decimals) public {
+        latestAnswer = _answer;
+        latestTimestamp = block.timestamp;
+        getAnswerForTokenPair[_baseToken][_quoteToken] = _answer;
+        getDecimalsForTokenPair[_baseToken][_quoteToken ] = _decimals;
     }
 
     function updateAnswer(int256 _answer) public {
@@ -61,18 +75,12 @@ contract MockV3Aggregator {
         );
     }
 
-    function latestRoundData(address base, address quote)
+    function latestRoundData(address _base, address _quote)
         external
         view
         returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
     {
-        return (
-            uint80(latestRound),
-            getAnswer[latestRound],
-            getStartedAt[latestRound],
-            getTimestamp[latestRound],
-            uint80(latestRound)
-        );
+        return (uint80(1), getAnswerForTokenPair[_base][_quote], block.timestamp, block.timestamp, uint80(1));
     }
 
     function description() external pure returns (string memory) {
