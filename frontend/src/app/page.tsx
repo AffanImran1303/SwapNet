@@ -12,24 +12,45 @@ import {Input} from "@/components/ui/input";
 import swapToken from "../../public/arrow-up-arrow-down.png"
 import Image from "next/image";
 import {useState} from "react";
+import WalletConnectModal from "@/components/WalletConnectModal";
+
+
 export default function Home() {
     const [fromToken, setFromToken] = useState("");
     const [fromAmount, setFromAmount] = useState("");
+    const [fromFee, setFromFee] = useState(0);
 
     const [toAmount, setToAmount] = useState("");
     const [toToken, setToToken] = useState("");
+    const [toFee, setToFee] = useState(0);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     function handleFromAmount(e){
         e.preventDefault()
         setFromAmount(e.target.value)
+        setFromFee(calculateFee(fromAmount));
     }
 
     function handleToAmount(e) {
         e.preventDefault()
         setToAmount(e.target.value)
+        setToFee(calculateFee(toAmount));
     }
+
+
+    function calculateFee(amount) {
+        return parseFloat(amount) * 0.01; 
+    }
+
+    const totalFee = fromFee + toFee;
+
+    function handleConnect(walletName) {
+        console.log(`Wallet connected: ${walletName}`);
+        setIsModalOpen(false); 
+    }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24 bg-gradient-to-t from-bgPrimary to-bgSecondary">
+    <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-gradient-to-t from-bgPrimary to-bgSecondary">
       <NavBar/>
         <div className="text-[#F0D6FF] p-4 space-y-6 w-full max-w-3xl mt-4">
             <div className="flex gap-4">
@@ -45,7 +66,7 @@ export default function Home() {
                             <SelectItem value="Solana" className='text-[#F0D6FF] bg-bgSecondary border-0'>Solana</SelectItem>
                         </SelectContent>
                     </Select>
-                    <div className="w-[604px] h-[102px] rounded-lg flex bg-[#3E2F4C] my-2 items-center">
+                    <div className="w-[640px] h-[102px] rounded-lg flex bg-[#3E2F4C] my-2 items-center">
                         <div className='w-4/5'>
                             <Input name='from' placeholder='00.00' className="bg-transparent border-0 h-full text-center text-2xl font-bold text-gray-500" onChange={handleFromAmount}
                                    value={fromAmount}/>
@@ -65,8 +86,10 @@ export default function Home() {
                 </div>
             </div>
         </div>
-        <Image src={swapToken} alt={'exchange token'} width={48} height={48} className={'cursor-pointer'}/>
-        <div className="text-[#F0D6FF] p-4 space-y-6 w-full max-w-3xl mt-4">
+        <div>
+        <Image src={swapToken} alt={'exchange token'} width={50} height={50} className={'cursor-pointer object-center justify-center absolute'}/>
+        </div>
+        <div className="text-[#F0D6FF] p-9 space-y-6 w-full max-w-3xl mt-4">
             <div className="flex gap-4">
                 <span>To :</span>
                 <div className="flex flex-col">
@@ -80,7 +103,7 @@ export default function Home() {
                             <SelectItem value="Solana" className='text-[#F0D6FF] bg-bgSecondary border-0'>Solana</SelectItem>
                         </SelectContent>
                     </Select>
-                    <div className="w-[604px] h-[102px] rounded-lg flex bg-[#3E2F4C] my-2 items-center">
+                    <div className="w-[640px] h-[102px] rounded-lg flex bg-[#3E2F4C] my-2 items-center">
                         <div className='w-4/5'>
                             <Input name='from' placeholder='00.00' className="bg-transparent border-0 h-full text-center text-2xl font-bold text-gray-500" onChange={handleToAmount}
                                    value={toAmount}/>
@@ -97,9 +120,22 @@ export default function Home() {
                             </SelectContent>
                         </Select>
                     </div>
+                    <div>
+                        <p className="flex items-center justify-center my-5">Fees: ${totalFee.toFixed(2)} </p>
+                    </div>
+                    <div className="flex items-center justify-center">
+                        <Button onClick={() => setIsModalOpen(true)} className="bg-gradient-to-r from-purple-400 to-purple-600 rounded-3xl px-10 py-4 text-black mt-10">
+                        CONNECT WALLET
+                        </Button>
+                    </div>
+                    <WalletConnectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConnect={handleConnect} />
                 </div>
             </div>
         </div>
     </main>
   );
 }
+function calculateFee(amount: any): import("react").SetStateAction<number> {
+    throw new Error("Function not implemented.");
+}
+
