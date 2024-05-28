@@ -17,7 +17,6 @@ import {SafeERC20} from
 import {FeedRegistryInterface} from "@chainlink/brownie/interfaces/FeedRegistryInterface.sol";
 import {Denominations} from "@chainlink/brownie/Denominations.sol";
 
-
 /// @title P2p_SwapNet
 /// @author Jeremiah Chinedu
 /// @notice Project for chainlink hackathon
@@ -74,14 +73,13 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
 
     struct Position {
         address sellerAddress;
-        address sellerReceivingAddress; // the destination wallet address of the seller 
+        address sellerReceivingAddress; // the destination wallet address of the seller
         uint256 sellingFrom; // chain ID of the blockchain the seller is selling from
         address assetSelling; // the address of the asset the seller is selling
         address assetReceiving; // the address of the asset the seller wants to receive in exchange of the asset he is selling, in otherwords this is the asset the buyer will pay with
         uint8 exchangeRate; // the exchange rate should be between 1-10%
         uint64 destinationChainSelector; // the chainlink destination chain selectorID, i.e the buyer's chainlink chain selector
     }
-
 
     /// @notice This holds all the assets available for buying/swapping on the blockchain that this
     /// contract will be deployed on
@@ -245,7 +243,6 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
         return (priceOfAssetAInUsd) / priceOfAssetBInUsd;
     }
 
-
     /// @dev this function handles any message received from cross chain
     /// @dev this is called by the chainlink router
     /// @param message this is the message coming from the cross chain
@@ -277,9 +274,10 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
                 console.log("Exchaining Assets...");
                 s_sellerDepositedAssets[buyOrder.assetBought][buyOrder.seller] -= buyOrder.amountToReceive;
                 // send to buyer
-                bool success = IERC20(buyOrder.assetBought).transfer(buyOrder.buyerReceivingAddress, buyOrder.amountToReceive);
+                bool success =
+                    IERC20(buyOrder.assetBought).transfer(buyOrder.buyerReceivingAddress, buyOrder.amountToReceive);
                 if (success) {
-                   // send to sender
+                    // send to sender
                     _transferAsset(
                         buyOrder.buyerChainSelector,
                         buyOrder.sellerReceivingAddress,
@@ -311,7 +309,6 @@ contract P2pSwap is CCIPReceiver, OwnerIsCreator {
     ) internal {
         _transferAsset(_buyerDestinationChainSelector, _buyerAddress, _buyerAsset, _assetAmount, new bytes(0));
     }
-
 
     /// @dev This function handles the transfer of asset
     function _transferAsset(
