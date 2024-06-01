@@ -24,6 +24,7 @@ const config = {
         buttonPrimary: "#3E205B",
         buttonSecondary: "#9D4EDD",
         sliderPrimary: "#866699",
+        panelPrimary: "#140F1C",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

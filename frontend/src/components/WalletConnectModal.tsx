@@ -12,7 +12,7 @@ const WalletConnectModal = ({ isOpen, onClose, onConnect }) => {
 
     return (
         <div onClick={onClose} className="fixed inset-0 backdrop-blur-sm  flex items-center justify-center p-4 ">
-            <div className="bg-bgSecondary py-5 pl-5 pr-40 rounded-lg">
+            <div className="bg-panelPrimary py-5 pl-5 pr-40 rounded-lg">
                 <button onClick={() => onConnect('Metamask')} className="block w-full p-3 text-left hover:opacity-60">
                     <Image src={metaMask} alt="metamask" width={24} height={24} className="inline-block mr-2" />
                     Metamask
