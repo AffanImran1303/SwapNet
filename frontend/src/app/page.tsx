@@ -50,11 +50,11 @@ export default function Home() {
     }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-gradient-to-t from-bgPrimary to-bgSecondary">
+    <main className="flex min-h-screen flex-col items-center justify-between px-10 py-1 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-bgSecondary from-10% to-bgPrimary to-80% ">
       <NavBar/>
-        <div className="text-[#F0D6FF] p-4 space-y-6 w-full max-w-3xl mt-4">
-            <div className="flex gap-4">
-                <span>From :</span>
+        <div className="text-[#F0D6FF] p-8 space-y-6 w-full max-w-2xl mt-4">
+            <div className="flex gap-8">
+                <span>Send:</span>
                 <div className="flex flex-col">
                     <Select>
                         <SelectTrigger className="text-[#F0D6FF] bg-bgSecondary w-[140px] h-[30px] rounded-full border-0">
@@ -66,11 +66,11 @@ export default function Home() {
                             <SelectItem value="Solana" className='text-[#F0D6FF] bg-bgSecondary border-0'>Solana</SelectItem>
                         </SelectContent>
                     </Select>
-                    <div className="w-[640px] h-[102px] rounded-lg flex bg-[#3E2F4C] my-2 items-center">
-                        <div className='w-4/5'>
-                            <Input name='from' placeholder='00.00' className="bg-transparent border-0 h-full text-center text-2xl font-bold text-gray-500" onChange={handleFromAmount}
+                    <div className="w-[600px] h-[140px] rounded-2xl flex bg-[#3E2F4C] my-2 items-center">
+                        <div className='w-4/4'>
+                            <Input name='from' placeholder='00.00' className="bg-transparent border-0 h-full text-center text-3xl font-bold text-gray-100" onChange={handleFromAmount}
                                    value={fromAmount}/>
-                            <div className='bg-transparent border-0 text-center text-sm text-gray-500'>$ {fromAmount ? fromAmount : '00.00'}</div>
+                            <div className='bg-transparent border-0 text-center text-sm text-gray-100 text-opacity-50'>$ {fromAmount ? fromAmount : '00.00'}</div>
                         </div>
                         <Select>
                             <SelectTrigger className="text-[#F0D6FF] w-[133px] bg-bgSecondary h-full border-0">
@@ -87,14 +87,14 @@ export default function Home() {
             </div>
         </div>
         <div>
-        <Image src={swapToken} alt={'exchange token'} width={50} height={50} className={'cursor-pointer object-center justify-center absolute'}/>
+        <Image src={swapToken} alt={'exchange token'} width={50} height={50} className={'cursor-pointer object-center justify-center absolute bg-bgSecondary p-3 rounded-full'}/>
         </div>
-        <div className="text-[#F0D6FF] p-9 space-y-6 w-full max-w-3xl mt-4">
-            <div className="flex gap-4">
-                <span>To :</span>
+        <div className="text-[#F0D6FF] p-12 space-y-6 w-full max-w-3xl mt-4">
+            <div className="flex gap-11">
+                <span>Receive:</span>
                 <div className="flex flex-col">
                     <Select>
-                        <SelectTrigger className="text-[#F0D6FF] bg-bgSecondary w-[140px] h-[30px] rounded-full border-0">
+                        <SelectTrigger className="text-[#f9f0ff] bg-bgSecondary w-[140px] h-[30px] rounded-full border-0">
                             <SelectValue placeholder="Select a token" />
                         </SelectTrigger>
                         <SelectContent className={'bg-bgSecondary text-[#F0D6FF] border-0'}>
@@ -103,11 +103,11 @@ export default function Home() {
                             <SelectItem value="Solana" className='text-[#F0D6FF] bg-bgSecondary border-0'>Solana</SelectItem>
                         </SelectContent>
                     </Select>
-                    <div className="w-[640px] h-[102px] rounded-lg flex bg-[#3E2F4C] my-2 items-center">
-                        <div className='w-4/5'>
-                            <Input name='from' placeholder='00.00' className="bg-transparent border-0 h-full text-center text-2xl font-bold text-gray-500" onChange={handleToAmount}
+                    <div className="w-[600px] h-[140px] rounded-2xl flex bg-[#3E2F4C] my-2 items-center">
+                        <div className='w-4/4'>
+                            <Input name='from' placeholder='00.00' className="bg-transparent border-0 h-full text-center text-3xl font-bold text-gray-400" onChange={handleToAmount}
                                    value={toAmount}/>
-                            <div className='bg-transparent border-0 text-center text-sm text-gray-500'>$ {toAmount ? toAmount : '00.00'}</div>
+                            <div className='bg-transparent border-0 text-center text-sm text-gray-100 text-opacity-50'>$ {toAmount ? toAmount : '00.00'}</div>
                         </div>
                         <Select>
                             <SelectTrigger className="text-[#F0D6FF] w-[133px] bg-bgSecondary h-full border-0">
@@ -124,7 +124,7 @@ export default function Home() {
                         <p className="flex items-center justify-center my-5">Fees: ${totalFee.toFixed(2)} </p>
                     </div>
                     <div className="flex items-center justify-center">
-                        <Button onClick={() => setIsModalOpen(true)} className="bg-gradient-to-r from-purple-400 to-purple-600 rounded-3xl px-10 py-4 text-black mt-10">
+                        <Button onClick={() => setIsModalOpen(true)} className="bg-gradient-to-r from-purple-300 to-buttonSecondary rounded-3xl px-10 py-4 text-black mt-10">
                         CONNECT WALLET
                         </Button>
                     </div>

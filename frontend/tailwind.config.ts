@@ -23,6 +23,7 @@ const config = {
         bgSecondary: "#3E2F4C",
         buttonPrimary: "#3E205B",
         buttonSecondary: "#9D4EDD",
+        sliderPrimary: "#866699",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

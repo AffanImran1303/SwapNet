@@ -8,10 +8,10 @@ export default function NavBar() {
     return (
         <header className="flex justify-between items-center w-full p-4 bg-transparent">
             <span>
-                <Image src={swapnetLogo} alt='swapnet logo' width={300} height={40} />
+                <Image src={swapnetLogo} alt='swapnet logo' width={80} height={40} />
             </span>
             <ToggleSlider />
-            <Button asChild className={'w-[142px] h-[40px] bg-bgSecondary rounded-[20px] text-white'}>
+            <Button asChild className={'w-[142px] h-[40px] bg-buttonPrimary rounded-[20px] text-white'}>
                 <Link href="#">Connect wallet</Link>
             </Button>
         </header>
