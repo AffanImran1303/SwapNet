@@ -10,16 +10,16 @@ import {DeployP2pSwap} from "../script/DeployP2pSwap.s.sol";
 
 contract P2PSwapTest is Test {
     CCIPLocalSimulator public ccipSimulator;
-    P2pSwap public sellerContract;
-    P2pSwap public buyerContract;
+    P2pSwap public sellerContract; // contract deployed on the seller's blockchain
+    P2pSwap public buyerContract; //  contract deployed on the buyer's blockchain
     DeployP2pSwap deployer;
 
-    BurnMintERC677Helper sellerAsset;
-    BurnMintERC677Helper buyerAsset;
-    uint64 destinationChainSelector;
+    BurnMintERC677Helper sellerAsset; // Asset sold by the seller
+    BurnMintERC677Helper buyerAsset; //  Asset used to buy by the buyer
+    uint64 destinationChainSelector; //  chainlink destination chain selector
 
     // SOURCE ADDRESSES
-    address SELLER_1 = makeAddr("Seller_1");
+    address SELLER_1 = makeAddr("Seller_1"); 
     address BUYER_1 = makeAddr("Buyer_1");
     address BUYER_2 = makeAddr("Buyer_2");
 
