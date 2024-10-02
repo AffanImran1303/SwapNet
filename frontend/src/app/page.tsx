@@ -55,7 +55,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-between px-10 py-1 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-bgSecondary from-10% to-bgPrimary to-80% ">
       <NavBar/>
         <div className="text-[#F0D6FF] p-8 space-y-6 w-full max-w-2xl mt-4">
-            <div className="flex gap-8">
+            <div className="flex gap-4">
                 <span>Send:</span>
                 <div className="flex flex-col">
                 <NetworkSelector />
@@ -74,7 +74,7 @@ export default function Home() {
         <Image src={swapToken} alt={'exchange token'} width={50} height={50} className={'cursor-pointer object-center justify-center absolute'}/>
         </div>
         <div className="text-[#F0D6FF] p-12 space-y-6 w-full max-w-3xl mt-4">
-            <div className="flex gap-11">
+            <div className="flex gap-7">
                 <span>Receive:</span>
                 <div className="flex flex-col">
                 <NetworkSelector />
